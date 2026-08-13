@@ -1,0 +1,15 @@
+# Set DOMAIN to your domain (e.g. example.com) in .env for production;
+# Caddy will then handle automatic TLS. Without it, it serves plain HTTP
+# on http://localhost so `docker compose up` works out of the box.
+
+{$DOMAIN:http://localhost} {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy backend:3001
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

@@ -14,5 +14,10 @@ export default defineConfig({
 			},
 			adapter: adapter()
 		})
-	]
+	],
+	server: {
+		proxy: {
+			'/api': 'http://localhost:3001'
+		}
+	}
 });
