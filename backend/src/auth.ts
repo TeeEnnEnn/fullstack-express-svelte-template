@@ -18,4 +18,10 @@ export const auth = betterAuth({
 	// The baseURL origin is trusted by default; add frontend origins (dev, other
 	// environments) here so Better Auth accepts their Origin header.
 	trustedOrigins,
+	// Keep the Origin/CSRF check enabled even in test environments. Better Auth
+	// otherwise auto-disables it when it detects tests (NODE_ENV=test), which
+	// would hide regressions like an untrusted BETTER_AUTH_URL.
+	advanced: {
+		disableOriginCheck: false,
+	},
 });

@@ -104,13 +104,61 @@ npm install
 npm run dev
 ```
 
-## Backend scripts
+## Testing
+
+Both test suites need the Postgres database running (`docker compose up db`).
+
+### Backend — Vitest + Supertest
+
+Integration tests hit the Express app through Supertest against a dedicated
+`app_test` database. The vitest global setup creates the database if missing,
+applies migrations, and every test starts from an empty database.
+
+```bash
+cd backend
+npm test            # one run
+npm run test:watch  # watch mode
+```
+
+The tests exercise the full HTTP stack including Better Auth: signup, sign-in,
+session cookies, the origin/CSRF check (an untrusted `Origin` is rejected), and
+protected routes (`/api/me`, `/api/items`). Note that `advanced.disableOriginCheck`
+is set to `false` in `backend/src/auth.ts` so the origin check stays active even
+under `NODE_ENV=test` — Better Auth otherwise disables it automatically.
+
+### Frontend — Playwright
+
+End-to-end tests run a production build (`vite preview`) against a test backend on
+`:3001` backed by `app_test`. Both are started automatically by Playwright's
+`webServer` config; a global setup wipes the database before the suite.
+
+```bash
+cd frontend
+npx playwright install chromium   # once, locally
+npm run test:e2e                  # headless
+npm run test:e2e:ui               # interactive UI
+npm run test:e2e:headed           # headed browser
+```
+
+Tests cover the health check, the sign-up / sign-out / sign-in flow, and the
+protected items page.
+
+### CI
+
+`.github/workflows/ci.yml` runs both suites on every pull request:
+backend tests against a Postgres service, and Playwright with
+`npx playwright install --with-deps chromium`. The Playwright report is uploaded
+as an artifact on failure.
 
 | Script                  | Description                              |
 | ----------------------- | ---------------------------------------- |
 | `npm run dev`           | Run with hot reload (tsx watch)          |
-| `npm run build`         | Compile to `dist/`                       |
+| `npm run build`         | Compile to `dist/` (excludes tests)      |
 | `npm start`             | Run compiled output                      |
+| `npm run typecheck`     | Type-check source + tests                |
+| `npm test`              | Vitest + Supertest integration tests     |
+| `npm run test:watch`    | Vitest watch mode                        |
+| `npm run serve:test`    | Boot the API for Playwright e2e          |
 | `npm run generate:openapi` | Regenerate `openapi.json`            |
 | `npm run db:generate`   | Generate a Drizzle migration             |
 | `npm run db:migrate`    | Apply migrations                         |
@@ -145,14 +193,20 @@ backend/
     middleware/validate.ts
     middleware/require-auth.ts
     openapi/            # registry + spec generator
-    routes/             # health, me, items
+    routes/             # health, me, items (+ *.test.ts colocated tests)
+  tests/                # vitest global setup/setup/helpers, e2e DB reset
   drizzle/              # committed migrations
   openapi.json          # generated
+  vitest.config.ts
+  tsconfig.build.json   # build config (excludes tests)
 frontend/
   src/lib/api/          # generated schema.d.ts + typed client
   src/lib/auth-client.ts
   src/routes/           # health (/), signup, signin, items (protected)
+  e2e/                  # Playwright specs + helpers
+  playwright.config.ts
 compose.yaml
 Caddyfile
 .env.example
+.github/workflows/ci.yml
 ```

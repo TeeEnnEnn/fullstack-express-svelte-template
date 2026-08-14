@@ -19,5 +19,12 @@ export default defineConfig({
 		proxy: {
 			'/api': 'http://localhost:3001'
 		}
+	},
+	preview: {
+		proxy: {
+			// The preview server does not inherit `server.proxy`; keep it in sync so
+			// `vite preview` (used by e2e tests) can reach the backend too.
+			'/api': 'http://localhost:3001'
+		}
 	}
 });
