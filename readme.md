@@ -53,7 +53,8 @@ Swagger UI is served at `/api/docs` and the raw spec at `/api/openapi.json`.
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 26+ (the repo pins Node 26 — `.mise.toml` for mise, `.node-version`
+  for nvm/fnm/nodenv; `engines` enforce it on install)
 - Docker + Docker Compose (for the database and full stack)
 
 ### Try it
@@ -272,6 +273,7 @@ frontend/
 lint-staged.config.js   # per-package prettier/oxlint on staged files
 scripts/run-in-package.mjs  # runs a package's tool with its cwd (for lint-staged)
 package.json            # root: husky + lint-staged only
+.mise.toml / .node-version  # Node 26 pinned for mise / nvm & co
 compose.yaml
 Caddyfile
 LICENSE                 # MIT

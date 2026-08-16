@@ -25,7 +25,7 @@
 		"serve:test": "tsx src/index.ts"
 	},
 	"engines": {
-		"node": ">=20"
+		"node": ">=26"
 	},
 	"dependencies": {
 		"@asteasolutions/zod-to-openapi": "^9.1.0",
