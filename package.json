@@ -1,0 +1,12 @@
+{
+	"name": "full-stack-svelte-template",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"husky": "^9.1.7",
+		"lint-staged": "^17.3.0"
+	}
+}

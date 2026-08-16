@@ -1,4 +1,4 @@
-import type { Session, User } from "better-auth";
+import type { Session, User } from 'better-auth';
 
 declare global {
 	namespace Express {

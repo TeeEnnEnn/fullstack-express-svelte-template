@@ -33,7 +33,11 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
+      - run: npx drizzle-kit check
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
   e2e:
     name: E2E (Playwright)
@@ -65,6 +69,10 @@ jobs:
         working-directory: frontend
       - run: npm ci
         working-directory: backend
+      - run: npm run check
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: npm run test:e2e
@@ -75,3 +83,24 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
           retention-days: 7
+
+  codegen:
+    name: Generated artifacts in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run generate:openapi
+        working-directory: backend
+      - run: npm run generate:types
+        working-directory: frontend
+      - name: Fail if generated artifacts changed
+        run: git diff --exit-code -- backend/openapi.json frontend/src/lib/api/schema.d.ts

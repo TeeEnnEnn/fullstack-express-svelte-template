@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -e
+
+# Format and lint staged files.
+npx lint-staged
+
+# Regenerate the Drizzle migration when the schema changes.
+if git diff --cached --name-only | grep -qE '^backend/src/db/(schema|items)\.ts$'; then
+	(cd backend && npm run db:generate)
+fi
+
+# Regenerate the OpenAPI spec and typed client when the API surface changes.
+if git diff --cached --name-only | grep -qE '^backend/src/(routes|openapi|db)/'; then
+	(cd backend && npm run generate:openapi)
+	(cd frontend && npm run generate:types)
+fi
+
+# Stage everything the generators produced.
+git add backend/drizzle backend/openapi.json frontend/src/lib/api/schema.d.ts

@@ -145,26 +145,84 @@ protected items page.
 
 ### CI
 
-`.github/workflows/ci.yml` runs both suites on every pull request:
-backend tests against a Postgres service, and Playwright with
-`npx playwright install --with-deps chromium`. The Playwright report is uploaded
-as an artifact on failure.
+`.github/workflows/ci.yml` runs three jobs on every pull request:
 
-| Script                  | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `npm run dev`           | Run with hot reload (tsx watch)          |
-| `npm run build`         | Compile to `dist/` (excludes tests)      |
-| `npm start`             | Run compiled output                      |
-| `npm run typecheck`     | Type-check source + tests                |
-| `npm test`              | Vitest + Supertest integration tests     |
-| `npm run test:watch`    | Vitest watch mode                        |
-| `npm run serve:test`    | Boot the API for Playwright e2e          |
+- **Backend tests** — typecheck, oxlint + prettier, Vitest against a Postgres
+  service, and `drizzle-kit check` to catch pending/broken migrations.
+- **E2E (Playwright)** — `svelte-check`, oxlint + prettier, then Playwright with
+  `npx playwright install --with-deps chromium`. The Playwright report is
+  uploaded as an artifact on failure.
+- **Generated artifacts in sync** — regenerates `backend/openapi.json` and
+  `frontend/src/lib/api/schema.d.ts` and fails if they differ from what is
+  committed, so a forgotten `generate:openapi`/`generate:types` blocks the PR.
+
+| Script                     | Description                          |
+| -------------------------- | ------------------------------------ |
+| `npm run dev`              | Run with hot reload (tsx watch)      |
+| `npm run build`            | Compile to `dist/` (excludes tests)  |
+| `npm start`                | Run compiled output                  |
+| `npm run typecheck`        | Type-check source + tests            |
+| `npm run lint`             | oxlint + prettier check              |
+| `npm run lint:fix`         | Auto-fix oxlint + prettier           |
+| `npm run format`           | Format with prettier                 |
+| `npm run format:check`     | Check formatting only                |
+| `npm run verify`           | typecheck + lint + tests             |
+| `npm test`                 | Vitest + Supertest integration tests |
+| `npm run test:watch`       | Vitest watch mode                    |
+| `npm run serve:test`       | Boot the API for Playwright e2e      |
 | `npm run generate:openapi` | Regenerate `openapi.json`            |
-| `npm run db:generate`   | Generate a Drizzle migration             |
-| `npm run db:migrate`    | Apply migrations                         |
-| `npm run db:push`       | Push schema directly (dev only)          |
+| `npm run db:generate`      | Generate a Drizzle migration         |
+| `npm run db:migrate`       | Apply migrations                     |
+| `npm run db:push`          | Push schema directly (dev only)      |
 
 Better Auth tables are generated with `npx auth@latest generate --output src/db/schema.ts`.
+
+## Code quality & automation
+
+Both packages are linted with [oxlint](https://oxc.rs/docs/guide/usage/linter.html)
+(the native linter — it works with TypeScript 7) and formatted with Prettier in
+one style. `.svelte` components are excluded from oxlint — they're covered by
+`svelte-check` (types) and Prettier (formatting). `npm run lint` and `npm run
+format` run both tools in each package.
+
+A pre-commit hook (husky) makes codegen automatic — run `npm install` once at
+the repo root to install it:
+
+- Staged files are formatted (Prettier) and linted (oxlint) on commit.
+- If `backend/src/db/schema.ts` / `items.ts` changed, a Drizzle migration is
+  generated automatically (`db:generate`).
+- If the backend API surface changed, `openapi.json` and the typed client
+  `schema.d.ts` are regenerated automatically.
+
+Migrations are also applied automatically at backend boot, so `db:migrate`
+never needs to be run by hand.
+
+## Production hardening
+
+- **Environment validation** — `backend/src/env.ts` validates the required
+  variables at boot and fails fast with a clear message instead of failing
+  cryptically at runtime.
+- **Auth rate limiting** — Better Auth rate limiting is configured
+  (`backend/src/auth.ts`) and enabled in production by default: per-IP
+  `max 100 / 60s` overall, `10 / 60s` on sign-in, `5 / 60s` on sign-up.
+- **Security headers** — `helmet` sets the standard headers. The
+  Content-Security-Policy is disabled because Swagger UI serves inline
+  scripts — re-enable it if you remove or self-host the docs UI.
+- **Request logging** — every request is logged as JSON via `pino-http`
+  (silenced in tests). Set `LOG_LEVEL` (e.g. `debug`) to change verbosity.
+- **Graceful shutdown** — SIGTERM/SIGINT close the HTTP server and the
+  Postgres pool before exiting, so Docker `stop` is clean.
+
+## Customizing this template
+
+- Rename the packages (`backend/package.json`, `frontend/package.json`) and the
+  root `package.json` name.
+- Replace the demo `items` feature (route + page + e2e spec) with your own
+  domain.
+- Email verification and password reset are not enabled — they require an SMTP
+  provider through Better Auth's `sendVerificationEmail` / `sendResetPassword`
+  hooks.
+- MIT licensed — see `LICENSE` if you're distributing it.
 
 ## Deploying to Hetzner
 
@@ -186,9 +244,10 @@ Caddy terminates TLS automatically for `DOMAIN`.
 ```
 backend/
   src/
-    index.ts            # boot: run migrations, listen
-    app.ts              # express setup, CORS, Better Auth mount, Swagger UI
-    auth.ts             # Better Auth config (drizzle adapter)
+    index.ts            # boot: validate env, run migrations, listen, graceful shutdown
+    app.ts              # express setup, helmet, pino logging, CORS, Better Auth, Swagger UI
+    auth.ts             # Better Auth config (drizzle adapter, rate limiting)
+    env.ts              # zod validation of required env vars
     db/                 # drizzle pool + schema (Better Auth tables, items)
     middleware/validate.ts
     middleware/require-auth.ts
@@ -199,14 +258,24 @@ backend/
   openapi.json          # generated
   vitest.config.ts
   tsconfig.build.json   # build config (excludes tests)
+  .oxlintrc.json        # oxlint config
+  prettier.config.js    # prettier config (matches frontend style)
+  .prettierignore
 frontend/
   src/lib/api/          # generated schema.d.ts + typed client
   src/lib/auth-client.ts
   src/routes/           # health (/), signup, signin, items (protected)
   e2e/                  # Playwright specs + helpers
   playwright.config.ts
+  .oxlintrc.json        # oxlint config (excludes .svelte)
+.husky/pre-commit       # formats/lints staged files, auto-regens migration + OpenAPI
+lint-staged.config.js   # per-package prettier/oxlint on staged files
+scripts/run-in-package.mjs  # runs a package's tool with its cwd (for lint-staged)
+package.json            # root: husky + lint-staged only
 compose.yaml
 Caddyfile
+LICENSE                 # MIT
 .env.example
 .github/workflows/ci.yml
+.github/dependabot.yml  # dependency update PRs
 ```
